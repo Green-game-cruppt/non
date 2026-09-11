@@ -1,0 +1,34 @@
+$code = @"
+using System;
+using System.Threading.Tasks;
+using Windows.Media.Capture;
+using Windows.Storage;
+using Windows.Media.MediaProperties;
+using Windows.Media.Capture.Frames;
+
+public class CameraCapture {
+    public static async Task CapturePhotoAsync() {
+        try {
+            var capture = new MediaCapture();
+            // 初始化，如果系统禁用了摄像头权限，这里会直接抛出 UnauthorizedAccessException 异常
+            await capture.InitializeAsync(); 
+            
+            // 创建保存路径（图片文件夹）
+            var file = await KnownFolders.PicturesLibrary.CreateFileAsync("Snap.jpg", CreationCollisionOption.GenerateUniqueName);
+            var profile = ImageEncodingProperties.CreateJpeg();
+            
+            // 执行拍照
+            await capture.CapturePhotoToStorageFileAsync(profile, file);
+        }
+        catch (UnauthorizedAccessException) {
+            // 捕获权限不足异常
+            Console.WriteLine("错误：Win11 系统未开启摄像头权限，请在设置中允许应用访问摄像头。");
+        }
+        catch (Exception ex) {
+            Console.WriteLine("发生错误: " + ex.Message);
+        }
+    }
+}
+"@
+Add-Type -TypeDefinition $code -Language CSharpSignInGame -ReferencedAssemblies "System.Runtime.WindowsRuntime", "Windows"
+[CameraCapture]::CapturePhotoAsync().Wait()
